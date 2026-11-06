@@ -106,7 +106,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   LumiRise
                 </span>
                 <span className="text-[10px] font-semibold text-purple-400 uppercase tracking-widest block mt-1 truncate">
-                  AI Education Platform
+                  Learning Platform
                 </span>
               </div>
             )}

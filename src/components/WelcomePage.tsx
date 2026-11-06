@@ -25,7 +25,7 @@ export const WelcomePage: React.FC<WelcomePageProps> = ({ onGetStarted }) => {
                 LumiRise
               </span>
               <span className="text-[10px] font-semibold text-purple-600 uppercase tracking-widest block mt-0.5">
-                AI Education Platform
+                Learning Platform
               </span>
             </div>
           </div>

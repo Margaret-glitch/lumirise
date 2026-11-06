@@ -234,7 +234,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             LumiRise
           </h2>
           <span className="text-[10px] font-semibold text-purple-600 uppercase tracking-widest block">
-            AI Education Platform
+            Learning Platform
           </span>
         </div>
 
@@ -409,28 +409,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </svg>
                   <span>Continue with Google</span>
                 </button>
-
-                {/* Quick Demo Access */}
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                  <span>Quick Access:</span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleFillDemo('student')}
-                      className="text-purple-600 font-bold hover:underline"
-                    >
-                      Student Demo
-                    </button>
-                    <span>·</span>
-                    <button
-                      type="button"
-                      onClick={() => handleFillDemo('admin')}
-                      className="text-purple-600 font-bold hover:underline"
-                    >
-                      Admin Demo
-                    </button>
-                  </div>
-                </div>
               </form>
             </div>
           )}
