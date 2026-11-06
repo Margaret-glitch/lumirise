@@ -1,0 +1,6 @@
+{
+  "name": "Education App Inspired Design",
+  "description": "LumiRise AI-powered educational app connected to Gemini API for automatic generation of complete courses, lessons, real-world examples, summaries, and quizzes, with persistent database storage and admin course management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
