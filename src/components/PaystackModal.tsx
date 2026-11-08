@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CreditCard,
   Lock,
@@ -56,6 +56,28 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
   const [successInfo, setSuccessInfo] = useState<PaymentRecord | null>(null);
   const [pendingTransferInfo, setPendingTransferInfo] = useState<any | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [serverPublicKey, setServerPublicKey] = useState<string>('');
+
+  // Fetch server config and load Paystack script on mount
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/paystack/config')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.publicKey) {
+            setServerPublicKey(data.publicKey);
+          }
+        })
+        .catch((err) => console.warn('Failed to fetch Paystack config:', err));
+
+      if (!window.PaystackPop) {
+        const script = document.createElement('script');
+        script.src = 'https://js.paystack.co/v1/inline.js';
+        script.async = true;
+        document.body.appendChild(script);
+      }
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -127,9 +149,11 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
         return;
       }
 
-      const { reference, publicKey, authorizationUrl } = initData;
+      const reference = initData.reference;
+      const publicKey = initData.publicKey || serverPublicKey || 'pk_test_demo';
+      const authorizationUrl = initData.authorizationUrl;
 
-      // If channel is bank_transfer and backend returns bank details or we want to display instructions
+      // If channel is bank_transfer
       if (selectedChannel === 'bank_transfer') {
         setPendingTransferInfo({
           reference,
@@ -156,8 +180,20 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
         return;
       }
 
+      // Ensure PaystackPop is loaded
+      if (!window.PaystackPop) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://js.paystack.co/v1/inline.js';
+          script.async = true;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('Failed to load Paystack checkout script. Please check your internet connection.'));
+          document.body.appendChild(script);
+        });
+      }
+
       // Step 2: Open Paystack Checkout Popup for Cards / Mobile Money
-      if (window.PaystackPop && publicKey) {
+      if (window.PaystackPop) {
         const handler = window.PaystackPop.setup({
           key: publicKey,
           email: email.trim().toLowerCase(),
@@ -210,7 +246,7 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
       } else if (authorizationUrl) {
         window.location.href = authorizationUrl;
       } else {
-        throw new Error('Paystack checkout script is still initializing or PAYSTACKPUBLICKEY is not configured.');
+        throw new Error('Paystack checkout script is still initializing. Please wait a second and try again.');
       }
     } catch (err: any) {
       console.error('Payment initialization error:', err);
@@ -271,7 +307,7 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
                 <span className="font-bold text-slate-900">{pendingTransferInfo.bankName}</span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-amber-200/60">
-                <span className="text-slate-600 font-medium">Account Number:</span>
+                <span className="text-slate-600 font-medium">Account Number / USSD:</span>
                 <div className="flex items-center gap-2">
                   <span className="font-mono font-bold text-slate-900 text-sm">{pendingTransferInfo.accountNumber || pendingTransferInfo.ussdCode}</span>
                   <button

@@ -672,9 +672,9 @@ app.delete('/api/notes/:id', (req: Request, res: Response) => {
 // Paystack Payment Integration Endpoints
 // -------------------------------------------------------------
 
-// Paystack Environment Keys
-const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACKPUBLICKEY || '';
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACKSECRETKEY || '';
+// Paystack Environment Keys (supporting both PAYSTACKPUBLICKEY and PAYSTACK_PUBLIC_KEY)
+const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACKPUBLICKEY || process.env.PAYSTACK_PUBLIC_KEY || process.env.VITE_PAYSTACK_PUBLIC_KEY || '';
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACKSECRETKEY || process.env.PAYSTACK_SECRET_KEY || '';
 
 // Default course price helper in NGN (Nigerian Naira)
 // If course doesn't specify price, default to 15,000 NGN (~$10 USD)
