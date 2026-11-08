@@ -16,8 +16,6 @@ import {
   Zap,
   ArrowRight,
   RefreshCw,
-  Copy,
-  Check,
 } from 'lucide-react';
 import { Course, UserSession, PaymentRecord } from '../types/education';
 
@@ -54,8 +52,6 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<PaymentRecord | null>(null);
-  const [pendingTransferInfo, setPendingTransferInfo] = useState<any | null>(null);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [serverPublicKey, setServerPublicKey] = useState<string>('');
 
   // Fetch server config and load Paystack script on mount
@@ -88,17 +84,10 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
     maximumFractionDigits: 0,
   }).format(coursePrice);
 
-  const handleCopy = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
-  };
-
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setIsProcessing(true);
-    setPendingTransferInfo(null);
 
     if (!email || !email.includes('@')) {
       setErrorMessage('Please provide a valid email address for your payment receipt.');
@@ -150,34 +139,11 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
       }
 
       const reference = initData.reference;
-      const publicKey = initData.publicKey || serverPublicKey || 'pk_test_demo';
+      const publicKey = initData.publicKey || serverPublicKey;
       const authorizationUrl = initData.authorizationUrl;
 
-      // If channel is bank_transfer
-      if (selectedChannel === 'bank_transfer') {
-        setPendingTransferInfo({
-          reference,
-          bankName: 'Wema Bank / Titan Trust (Paystack Dynamic)',
-          accountNumber: '025' + Math.floor(10000000 + Math.random() * 90000000),
-          accountName: 'LumiRise Education - Paystack',
-          amount: formattedPrice,
-          instructions: 'Make a transfer of ' + formattedPrice + ' to the account number above. Your course will be unlocked automatically upon confirmation.',
-        });
-        setIsProcessing(false);
-        return;
-      }
-
-      // If channel is ussd
-      if (selectedChannel === 'ussd') {
-        setPendingTransferInfo({
-          reference,
-          ussdCode: '*737*000*' + Math.floor(1000 + Math.random() * 9000) + '#',
-          bankName: 'GTBank / Quickteller USSD',
-          amount: formattedPrice,
-          instructions: 'Dial the USSD code on your registered mobile banking phone to authorize payment.',
-        });
-        setIsProcessing(false);
-        return;
+      if (!publicKey) {
+        throw new Error('Paystack public key is not configured. Please check your credentials.');
       }
 
       // Ensure PaystackPop is loaded
@@ -192,14 +158,24 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
         });
       }
 
-      // Step 2: Open Paystack Checkout Popup for Cards / Mobile Money
+      // Step 2: Open Paystack Checkout Popup
+      // Important: Paystack's legacy inline validator checks Object.prototype.toString.call(fn) === "[object Function]"
+      // Therefore callback and onClose must be standard non-async functions, not async arrow functions.
       if (window.PaystackPop) {
+        const channelList = selectedChannel === 'card'
+          ? ['card']
+          : selectedChannel === 'bank_transfer'
+            ? ['bank', 'card']
+            : selectedChannel === 'ussd'
+              ? ['ussd', 'card']
+              : ['mobile_money', 'card'];
+
         const handler = window.PaystackPop.setup({
           key: publicKey,
           email: email.trim().toLowerCase(),
-          amount: initData.amountInKobo,
+          amount: Math.round(initData.amountInKobo),
           currency: 'NGN',
-          channels: [selectedChannel === 'card' ? 'card' : 'mobile_money'],
+          channels: channelList,
           ref: reference,
           metadata: {
             courseId: course.id,
@@ -208,35 +184,35 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
             studentName: fullName,
             channel: selectedChannel,
           },
-          callback: async (response: { reference: string; status: string }) => {
+          callback: function (response: { reference: string; status: string }) {
             setIsProcessing(true);
-            try {
-              // Step 3: Verify transaction strictly on the backend
-              const verifyRes = await fetch('/api/paystack/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  reference: response.reference || reference,
-                  userId: currentUser?.id,
-                }),
+            fetch('/api/paystack/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                reference: response.reference || reference,
+                userId: currentUser?.id,
+              }),
+            })
+              .then((res) => res.json())
+              .then((verifyData) => {
+                if (!verifyData.success) {
+                  throw new Error(verifyData.error || 'Payment verification failed with Paystack.');
+                }
+
+                setSuccessInfo(verifyData.payment);
+                setTimeout(() => {
+                  onPaymentSuccess(course.id, verifyData.payment);
+                }, 1200);
+              })
+              .catch((vErr: any) => {
+                setErrorMessage(vErr.message || 'Verification failed. Please contact support.');
+              })
+              .finally(() => {
+                setIsProcessing(false);
               });
-
-              const verifyData = await verifyRes.json();
-              if (!verifyRes.ok || !verifyData.success) {
-                throw new Error(verifyData.error || 'Payment verification failed with Paystack.');
-              }
-
-              setSuccessInfo(verifyData.payment);
-              setTimeout(() => {
-                onPaymentSuccess(course.id, verifyData.payment);
-              }, 1200);
-            } catch (vErr: any) {
-              setErrorMessage(vErr.message || 'Verification failed. Please contact support.');
-            } finally {
-              setIsProcessing(false);
-            }
           },
-          onClose: () => {
+          onClose: function () {
             setIsProcessing(false);
             setErrorMessage('Transaction was cancelled or closed before completion.');
           },
@@ -288,59 +264,6 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
                 </span>
               </div>
             </div>
-          </div>
-        ) : pendingTransferInfo ? (
-          <div className="space-y-6">
-            <div className="space-y-1 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-2">
-                <Building2 className="w-7 h-7" />
-              </div>
-              <h3 className="text-lg font-black text-slate-900">Complete Your Payment</h3>
-              <p className="text-xs text-slate-500">
-                {pendingTransferInfo.instructions}
-              </p>
-            </div>
-
-            <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-2xl space-y-3 text-xs">
-              <div className="flex justify-between items-center pb-2 border-b border-amber-200/60">
-                <span className="text-slate-600 font-medium">Bank Name:</span>
-                <span className="font-bold text-slate-900">{pendingTransferInfo.bankName}</span>
-              </div>
-              <div className="flex justify-between items-center pb-2 border-b border-amber-200/60">
-                <span className="text-slate-600 font-medium">Account Number / USSD:</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-slate-900 text-sm">{pendingTransferInfo.accountNumber || pendingTransferInfo.ussdCode}</span>
-                  <button
-                    onClick={() => handleCopy(pendingTransferInfo.accountNumber || pendingTransferInfo.ussdCode, 'acc')}
-                    className="p-1 rounded-lg bg-amber-200/50 hover:bg-amber-200 text-amber-800 transition-colors"
-                  >
-                    {copiedField === 'acc' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-              <div className="flex justify-between items-center pb-2 border-b border-amber-200/60">
-                <span className="text-slate-600 font-medium">Account Name:</span>
-                <span className="font-bold text-slate-900">{pendingTransferInfo.accountName || 'LumiRise Education'}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-600 font-medium">Exact Amount:</span>
-                <span className="font-bold text-emerald-600 text-sm">{pendingTransferInfo.amount}</span>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl text-[11px] text-slate-500 text-center font-mono">
-              Transaction Ref: {pendingTransferInfo.reference}
-            </div>
-
-            <button
-              onClick={() => {
-                setPendingTransferInfo(null);
-                onClose();
-              }}
-              className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition-all"
-            >
-              Done / Return to Course
-            </button>
           </div>
         ) : (
           <div className="space-y-6">
@@ -406,7 +329,7 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
                     <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">Bank</span>
                   </div>
                   <span className="text-xs font-bold text-slate-900">Direct Bank Transfer</span>
-                  <span className="text-[10px] text-slate-400">Instant Virtual Account</span>
+                  <span className="text-[10px] text-slate-400">Virtual Account via Paystack</span>
                 </button>
 
                 <button
@@ -440,7 +363,7 @@ export const PaystackModal: React.FC<PaystackModalProps> = ({
                     <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Momo</span>
                   </div>
                   <span className="text-xs font-bold text-slate-900">Mobile Money</span>
-                  <span className="text-[10px] text-slate-400">Supported wallets</span>
+                  <span className="text-[10px] text-slate-400">Supported mobile wallets</span>
                 </button>
               </div>
             </div>
